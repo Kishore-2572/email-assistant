@@ -1,0 +1,72 @@
+name: Release
+
+# Manually triggered version release, mirroring the pattern used by
+# IABTechLab/iabgpp-es: bump a version, run tests, tag the commit, and
+# publish an artifact for that exact version — only if the tag is new.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.2.0, no leading v)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+      - name: Update VERSION file
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Releasing v$VERSION"
+          echo "$VERSION" > VERSION
+
+      - name: Check if release tag already exists
+        id: check
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if git show-ref --tags --verify --quiet "refs/tags/v$VERSION"; then
+            echo "Tag v$VERSION already exists"
+            echo "version_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag v$VERSION does not exist"
+            echo "version_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit, tag, and push
+        if: steps.check.outputs.version_changed == 'true'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add VERSION
+          git commit -m "Release v$VERSION"
+          git tag "v$VERSION"
+          git push origin HEAD:"${{ github.ref_name }}"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.version_changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          gh release create "v$VERSION" --title "v$VERSION" --generate-notes
