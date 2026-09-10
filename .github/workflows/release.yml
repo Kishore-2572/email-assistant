@@ -22,6 +22,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Ensure release tag does not already exist
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if git show-ref --tags --verify --quiet "refs/tags/v$VERSION"; then
+            echo "::error::Tag v$VERSION already exists. A released version is immutable — pick a new version number for these changes. Existing tags: $(git tag -l 'v*' | tail -5 | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "Tag v$VERSION does not exist yet — proceeding with release."
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -39,20 +48,7 @@ jobs:
           echo "Releasing v$VERSION"
           echo "$VERSION" > VERSION
 
-      - name: Check if release tag already exists
-        id: check
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if git show-ref --tags --verify --quiet "refs/tags/v$VERSION"; then
-            echo "Tag v$VERSION already exists"
-            echo "version_changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Tag v$VERSION does not exist"
-            echo "version_changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Commit, tag, and push
-        if: steps.check.outputs.version_changed == 'true'
         run: |
           VERSION="${{ github.event.inputs.version }}"
           git config user.email "actions@github.com"
@@ -64,7 +60,6 @@ jobs:
           git push origin "v$VERSION"
 
       - name: Create GitHub Release
-        if: steps.check.outputs.version_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
