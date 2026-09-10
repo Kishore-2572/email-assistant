@@ -48,12 +48,41 @@ jobs:
           echo "Releasing v$VERSION"
           echo "$VERSION" > VERSION
 
+      - name: Update CHANGELOG
+        run: |
+          python3 - "${{ github.event.inputs.version }}" <<'EOF'
+          import re, sys, datetime
+          version = sys.argv[1]
+          date = datetime.date.today().isoformat()
+          path = "CHANGELOG.md"
+          text = open(path).read()
+          pattern = r"(## \[Unreleased\]\n)(.*?)(\n## \[|\Z)"
+          def repl(m):
+              return f"{m.group(1)}\n## [{version}] — {date}\n{m.group(2)}{m.group(3)}"
+          new_text, n = re.subn(pattern, repl, text, count=1, flags=re.S)
+          if n == 0:
+              sys.exit("Could not find an '## [Unreleased]' section in CHANGELOG.md")
+          open(path, "w").write(new_text)
+          EOF
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          python3 - "${{ github.event.inputs.version }}" <<'EOF'
+          import re, sys
+          version = sys.argv[1]
+          text = open("CHANGELOG.md").read()
+          pattern = rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)"
+          m = re.search(pattern, text, re.S)
+          body = (m.group(1) if m else "").strip()
+          open("release_notes.md", "w").write(body)
+          EOF
+
       - name: Commit, tag, and push
         run: |
           VERSION="${{ github.event.inputs.version }}"
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
-          git add VERSION
+          git add VERSION CHANGELOG.md
           git commit -m "Release v$VERSION"
           git tag "v$VERSION"
           git push origin HEAD:"${{ github.ref_name }}"
@@ -64,4 +93,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          gh release create "v$VERSION" --title "v$VERSION" --generate-notes
+          if [ -s release_notes.md ]; then
+            gh release create "v$VERSION" --title "v$VERSION" --notes-file release_notes.md
+          else
+            echo "No CHANGELOG entry for v$VERSION — falling back to auto-generated notes."
+            gh release create "v$VERSION" --title "v$VERSION" --generate-notes
+          fi
