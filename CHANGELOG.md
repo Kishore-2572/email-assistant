@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-09-10
+
 - A new Feature Added
 
 ## [1.0.3] — 2026-09-10
