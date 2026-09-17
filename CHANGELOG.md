@@ -3,6 +3,8 @@
 All notable changes to this project are documented here.
 
 ## [Unreleased]
+
+## [1.1.2] — 2026-09-17
 - Fixed new bug
 
 ## [1.1.1] — 2026-09-10
